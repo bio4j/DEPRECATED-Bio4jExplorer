@@ -114,6 +114,9 @@
 			public const NODE_STATE:String = "NodeState";
 			public const RELATIONSHIP_STATE:String = "RelationshipState";
 			
+			protected var circleLayout:CircleLayout = null;
+			protected var forceLayout:ForceDirectedLayout = null;
+			
 			protected function application1_creationCompleteHandler(event:FlexEvent):void
 			{
 				MainManager.DEBUG_MODE = false;
@@ -346,7 +349,6 @@
 				});
 					
 				
-				
 				data.nodes.sortBy("data.label");
 				data.edges.sortBy("data.label");
 				
@@ -358,8 +360,9 @@
 				vis.operators.add(edgeLabeler);
 				
 				var nodeLabeler:Labeler = new Labeler("data.label", Data.NODES);
-				vis.operators.add(nodeLabeler);				
-				vis.operators.add(new CircleLayout());		
+				vis.operators.add(nodeLabeler);		
+				circleLayout = new CircleLayout()
+				vis.operators.add(circleLayout);		
 				
 				// enables the nodes to be dragged by the mouse
 				var dc:DragControl = new DragControl(NodeSprite);
@@ -427,7 +430,51 @@
 			}
 
 
-			protected function button1_clickHandler(event:MouseEvent):void
+			protected function stopLayoutButton_clickHandler(event:MouseEvent):void
+			{
+				flareVis.visualization.continuousUpdates = false;
+			}
+
+
+			protected function startLayoutButton_clickHandler(event:MouseEvent):void
+			{
+				setForceLayout();
+			}
+
+
+			protected function layoutCheckBox_changeHandler(event:Event):void
+			{
+				if(!layoutCheckBox.selected){
+					
+					flareVis.visualization.operators.remove(forceLayout);
+					flareVis.visualization.operators.add(circleLayout);
+					
+					flareVis.visualization.update();				
+					flareVis.visualization.continuousUpdates = false;		
+					
+				}else{
+					
+					setForceLayout();
+					
+				}
+			}
+			
+			protected function setForceLayout():void{
+				
+				forceLayout = new ForceDirectedLayout(true);
+				forceLayout.defaultParticleMass = 10;
+				forceLayout.defaultSpringLength = 150;
+				forceLayout.defaultSpringTension = 1;
+				flareVis.visualization.operators.remove(circleLayout);
+				flareVis.visualization.operators.add(forceLayout);
+				
+				flareVis.visualization.update();				
+				flareVis.visualization.continuousUpdates = true;
+				
+			}
+
+
+			protected function button2_clickHandler(event:MouseEvent):void
 			{
 				visualizeGraph(nodeXML);
 			}
@@ -482,7 +529,7 @@
 						 itemClick="relationshipsList_itemClickHandler(event)"/>
 			</s:NavigatorContent>			
 		</mx:TabNavigator>	
-		<s:Button label="Button" click="button1_clickHandler(event)"/>
+		<!--<s:Button label="Button" click="button2_clickHandler(event)"/>-->
 		<mx:VDividedBox width="100%" 
 						height="100%"
 						paddingLeft="10" 
@@ -537,18 +584,38 @@
 					</mx:VBox>
 				</s:HGroup>
 			</s:VGroup>
-			<mx:Canvas id="graphCanvas" 
-					   width="100%"
-					   height="100%" 
-					   backgroundColor="0xeeeFFF" >
-				<flex:FlareVis id="flareVis" 
-							   backgroundColor="0xeeeFFF" 
-							   left="0" 
-							   top="0"	
-							   verticalScrollPolicy="off"
-							   horizontalScrollPolicy="off"
-							   clipContent="true"/> 
-			</mx:Canvas>				
+			<s:VGroup width="100%"
+					  height="100%">
+				<mx:Canvas id="graphCanvas" 
+						   width="100%"
+						   height="100%" 
+						   backgroundColor="0xeeeFFF" >
+					<flex:FlareVis id="flareVis" 
+								   backgroundColor="0xeeeFFF" 
+								   left="0" 
+								   top="0"	
+								   verticalScrollPolicy="off"
+								   horizontalScrollPolicy="off"
+								   clipContent="true"/> 
+				</mx:Canvas>
+				<s:HGroup horizontalAlign="right" 
+						  width="100%"
+						  verticalAlign="middle">
+					<s:CheckBox 
+						id="layoutCheckBox"
+						change="layoutCheckBox_changeHandler(event)"
+						label="Apply force layout" 
+						selected="false"/>
+					<s:Button label="Stop"
+							  id="stopLayoutButton"
+							  click="stopLayoutButton_clickHandler(event)"/>
+					<s:Button label="Start"
+							  id="startLayoutButton"
+							  click="startLayoutButton_clickHandler(event)"
+							  enabled="{layoutCheckBox.selected}"
+							  />
+				</s:HGroup>
+			</s:VGroup>							
 		</mx:VDividedBox>		
 	</mx:HDividedBox>	
 </s:Application>
