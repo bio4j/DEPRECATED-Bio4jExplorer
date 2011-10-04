@@ -5,7 +5,9 @@
 			   minWidth="955" 
 			   minHeight="600"
 			   implements="com.era7.communication.interfaces.ServerCallable"	
-			   creationComplete="application1_creationCompleteHandler(event)" currentState="NodeState" xmlns:flex="flare.flex.*">
+			   creationComplete="application1_creationCompleteHandler(event)" 
+			   currentState="NodeState" 
+			   xmlns:flex="flare.flex.*">
 	<s:states>
 		<s:State name="NodeState"/>
 		<s:State name="RelationshipState"/>
@@ -165,7 +167,7 @@
 					
 					currentState = NODE_STATE;
 					
-					visualizeNodeGraph(node);
+					visualizeGraph(node);
 										
 					
 				}else if(response.getMethod() == RequestList.GET_RELATIONSHIP_REQUEST){
@@ -187,6 +189,8 @@
 					}else{
 						rightXMLList = rel.end_nodes[0].node;
 					}
+					
+					visualizeGraph(rel);
 					
 					currentState = RELATIONSHIP_STATE;
 					
@@ -212,52 +216,93 @@
 			//----------------------------------------------------------------------------
 			
 			
-			protected function visualizeNodeGraph(node:XML):void{
+			protected function visualizeGraph(element:XML):void{
 				
 				var nodeCounter:int = 0;				
-				var nodeName:String = node.name.toString();
-					
-				var inRels:XMLList = node.child("in_rels").child("relationship");
-				var outRels:XMLList = node.child("out_rels").child("relationship");
+				var elementName:String = element.name.toString();
+				
+				var itemType:String = element.item_type.toString();
 				
 				var data:Data = new Data(true);
 				
-				
-				var nodeObject:Object = {};
-				nodeObject["id"] = nodeName;
-				nodeObject["label"] = nodeName;
-				var nodeSprite:NodeSprite = data.addNode(nodeObject);
-							
-				for(var i:int=0; i<inRels.length(); i++){
+				if(itemType == "node"){
 					
-					var tempNodeObject:Object = {};
-					tempNodeObject["id"] = nodeCounter++;
-					tempNodeObject["label"] = "Node";
-					var tempNodeSprite:NodeSprite = data.addNode(tempNodeObject);
+					var inRels:XMLList = element.child("in_rels").child("relationship");
+					var outRels:XMLList = element.child("out_rels").child("relationship");		
 					
-					var edgeObject:Object = {};
-					edgeObject["id"] = inRels[i].name.toString();
-					edgeObject["label"] = inRels[i].name.toString();
-					data.addEdgeFor(tempNodeSprite, nodeSprite, true, edgeObject);
-							
+					var nodeObject:Object = {};
+					nodeObject["id"] = elementName;
+					nodeObject["label"] = elementName;
+					var nodeSprite:NodeSprite = data.addNode(nodeObject);
+					
+					for(var i:int=0; i<inRels.length(); i++){
+						
+						var tempNodeObject:Object = {};
+						tempNodeObject["id"] = nodeCounter++;
+						tempNodeObject["label"] = "Node";
+						var tempNodeSprite:NodeSprite = data.addNode(tempNodeObject);
+						
+						var edgeObject:Object = {};
+						edgeObject["id"] = inRels[i].name.toString();
+						edgeObject["label"] = inRels[i].name.toString();
+						data.addEdgeFor(tempNodeSprite, nodeSprite, true, edgeObject);
+						
+					}
+					
+					for(i=0; i<outRels.length(); i++){
+						
+						tempNodeObject = {};
+						tempNodeObject["id"] = nodeCounter++;
+						tempNodeObject["label"] = "Node";
+						tempNodeSprite = data.addNode(tempNodeObject);
+						
+						edgeObject = {};
+						edgeObject["id"] = outRels[i].name.toString();
+						edgeObject["label"] = outRels[i].name.toString();
+						data.addEdgeFor(nodeSprite, tempNodeSprite, true, edgeObject);
+						
+					}
+					
+				}else if(itemType == "relationship"){
+					
+					var startNodes:XMLList = element.child("start_nodes").child("node");
+					var endNodes:XMLList = element.child("end_nodes").child("node");	
+					
+					var startSprites:Array = new Array();
+					var endSprites:Array = new Array();
+					
+					for(i=0; i<startNodes.length(); i++){
+						
+						var startNodeObject:Object = {};
+						startNodeObject["id"] = startNodes[i].name.toString();
+						startNodeObject["label"] = startNodes[i].name.toString();
+						var startNodeSprite:NodeSprite = data.addNode(startNodeObject);
+						
+						startSprites.push(startNodeSprite);						
+						
+					}
+					
+					for(i=0; i<endNodes.length(); i++){
+						
+						var endNodeObject:Object = {};
+						endNodeObject["id"] = endNodes[i].name.toString();
+						endNodeObject["label"] = endNodes[i].name.toString();
+						var endNodeSprite:NodeSprite = data.addNode(endNodeObject);
+						
+						endSprites.push(endNodeSprite);		
+						
+					}
+					
+					for(var j:int=0;j<startSprites.length;j++){
+						for(var h:int=0;h<endSprites.length;h++){
+							edgeObject = {};
+							edgeObject["id"] = elementName;
+							edgeObject["label"] = elementName;
+							data.addEdgeFor(startSprites[j] as NodeSprite, endSprites[h] as NodeSprite, true, edgeObject);
+						}						
+					}
+					
 				}
-				
-				for(i=0; i<outRels.length(); i++){
-					
-					tempNodeObject = {};
-					tempNodeObject["id"] = nodeCounter++;
-					tempNodeObject["label"] = "Node";
-					tempNodeSprite = data.addNode(tempNodeObject);
-					
-					edgeObject = {};
-					edgeObject["id"] = outRels[i].name.toString();
-					edgeObject["label"] = outRels[i].name.toString();
-					data.addEdgeFor(nodeSprite, tempNodeSprite, true, edgeObject);
-					
-				}
-				
-				data.nodes.sortBy("data.label");
-				data.edges.sortBy("data.label");
 				
 				data.nodes.visit(function(ns:NodeSprite):void {
 					
@@ -266,7 +311,7 @@
 						ns.size = 3;
 						ns.shape = Shapes.CIRCLE;
 						ns.buttonMode = false;              // show hand cursor
-						ns.mouseEnabled = false;
+						ns.mouseEnabled = true;
 						
 					}else{
 						
@@ -279,7 +324,7 @@
 						
 						ns.addEventListener(MouseEvent.CLICK,onNodeSpriteClick);
 						
-					}					
+					}						
 					
 				});
 				
@@ -299,6 +344,11 @@
 					es.addEventListener(Event.RENDER,updateEdgeLabelPosition);
 					
 				});
+					
+				
+				
+				data.nodes.sortBy("data.label");
+				data.edges.sortBy("data.label");
 				
 				
 				var vis:Visualization = new Visualization();
@@ -309,14 +359,21 @@
 				
 				var nodeLabeler:Labeler = new Labeler("data.label", Data.NODES);
 				vis.operators.add(nodeLabeler);				
-				vis.operators.add(new CircleLayout());
+				vis.operators.add(new CircleLayout());		
 				
-				vis.controls.add(new DragControl());
+				// enables the nodes to be dragged by the mouse
+				var dc:DragControl = new DragControl(NodeSprite);
+				vis.controls.add(dc);
+				
+				// enables the node to move to the front when the mouse moves over it
+				var hc:HoverControl = new HoverControl(NodeSprite, HoverControl.MOVE_TO_FRONT);
+				vis.controls.add(hc);
 								
 				vis.update();
 				flareVis.visualization = vis;
 				
 			}
+			
 			
 			private function updateEdgeLabelPosition(evt:Event):void {
 				var es:EdgeSprite = evt.target as EdgeSprite;
@@ -372,7 +429,7 @@
 
 			protected function button1_clickHandler(event:MouseEvent):void
 			{
-				visualizeNodeGraph(nodeXML);
+				visualizeGraph(nodeXML);
 			}
 
 		]]>
@@ -425,70 +482,73 @@
 						 itemClick="relationshipsList_itemClickHandler(event)"/>
 			</s:NavigatorContent>			
 		</mx:TabNavigator>	
-		<!--<s:Button label="Button" click="button1_clickHandler(event)"/>-->
-		<s:VGroup height="100%"
-				  width="100%" 
-				  paddingLeft="10" 
-				  paddingTop="10" 
-				  paddingRight="10"
-				  paddingBottom="10">
-			<s:Label id="elementNameLabel" fontSize="16" fontWeight="bold"/>
-			<s:HGroup verticalAlign="middle">
-				<s:Label text="Item type:"  
-						 fontWeight="bold"/>
-				<s:Label id="itemTypeLabel"/>
-			</s:HGroup>				
-			<s:Label text="Description:" fontWeight="bold"/>
-			<mx:TextArea id="descriptionTextArea" 
-						 width="100%" 
-						 height="60" editable.RelationshipState="false"/>				
-			<s:HGroup width="100%" height="100%">
-				<mx:VBox width="100%" 
-						  height="100%" 
-						  paddingLeft="10" 
-						  paddingTop="10" 
-						  paddingRight="10" 
-						  paddingBottom="10" 
-						  backgroundColor="#EEEEEE">
-					<s:Label text.NodeState="Incoming Relationships" 
-							 text.RelationshipState="Start Nodes" 
+		<s:Button label="Button" click="button1_clickHandler(event)"/>
+		<mx:VDividedBox width="100%" 
+						height="100%"
+						paddingLeft="10" 
+						paddingRight="10" 
+						paddingBottom="10" 
+						paddingTop="10">
+			<s:VGroup height="100%"
+					  width="100%" 
+					  >
+				<s:Label id="elementNameLabel" fontSize="16" fontWeight="bold"/>
+				<s:HGroup verticalAlign="middle">
+					<s:Label text="Item type:"  
 							 fontWeight="bold"/>
-					<mx:List id="leftList"	
-							 height="100%"
-							 width="100%"
-							 dataProvider="{leftXMLList.name}"
-							 itemClick="leftList_itemClickHandler(event)"/>
-				</mx:VBox>
-				<mx:VBox width="100%" 
-						 height="100%" 
-						 paddingLeft="10" 
-						 paddingTop="10" 
-						 paddingRight="10" 
-						 paddingBottom="10" 
-						 backgroundColor="#EEEEEE">
-					<s:Label text.NodeState="Outgoing Relationships" 
-							 text.RelationshipState="End Nodes" 
-							 fontWeight="bold"/>
-					<mx:List id="rightList"	
-							 height="100%"
-							 width="100%"
-							 dataProvider="{rightXMLList.name}"
-							 itemClick="rightList_itemClickHandler(event)"/>
-				</mx:VBox>
-			</s:HGroup>
+					<s:Label id="itemTypeLabel"/>
+				</s:HGroup>				
+				<s:Label text="Description:" fontWeight="bold"/>
+				<mx:TextArea id="descriptionTextArea" 
+							 width="100%" 
+							 height="60" editable.RelationshipState="false"/>				
+				<s:HGroup width="100%" height="100%">
+					<mx:VBox width="100%" 
+							 height="100%" 
+							 paddingLeft="10" 
+							 paddingTop="10" 
+							 paddingRight="10" 
+							 paddingBottom="10" 
+							 backgroundColor="#EEEEEE">
+						<s:Label text.NodeState="Incoming Relationships" 
+								 text.RelationshipState="Start Nodes" 
+								 fontWeight="bold"/>
+						<mx:List id="leftList"	
+								 height="100%"
+								 width="100%"
+								 dataProvider="{leftXMLList.name}"
+								 itemClick="leftList_itemClickHandler(event)"/>
+					</mx:VBox>
+					<mx:VBox width="100%" 
+							 height="100%" 
+							 paddingLeft="10" 
+							 paddingTop="10" 
+							 paddingRight="10" 
+							 paddingBottom="10" 
+							 backgroundColor="#EEEEEE">
+						<s:Label text.NodeState="Outgoing Relationships" 
+								 text.RelationshipState="End Nodes" 
+								 fontWeight="bold"/>
+						<mx:List id="rightList"	
+								 height="100%"
+								 width="100%"
+								 dataProvider="{rightXMLList.name}"
+								 itemClick="rightList_itemClickHandler(event)"/>
+					</mx:VBox>
+				</s:HGroup>
+			</s:VGroup>
 			<mx:Canvas id="graphCanvas" 
-					  width="100%"
-					  height="100%" >
+					   width="100%"
+					   height="100%" 
+					   backgroundColor="0xeeeFFF" >
 				<flex:FlareVis id="flareVis" 
 							   backgroundColor="0xeeeFFF" 
 							   left="0" 
 							   top="0"	
 							   verticalScrollPolicy="off"
 							   horizontalScrollPolicy="off"
-							   clipContent="true"
-							   /> 
-			</mx:Canvas>
-				
-		</s:VGroup>
+							   clipContent="true"/> 
+			</mx:Canvas>				
+		</mx:VDividedBox>		
 	</mx:HDividedBox>	
 </s:Application>
