@@ -15,6 +15,14 @@ package com.era7.bioinfo.bio4jexplorer.comm
 			super();			
 		}
 		
+		public function getEverything(serverCallable:ServerCallable):void{
+			
+			var request:Request = new Request();
+			request.setMethod(RequestList.GET_EVERYTHING_REQUEST);			
+			mainManager.loadRequest(request, serverCallable, UrlManager.GET_EVERYTHING_URL);
+			
+		}
+		
 		public function getNodes(serverCallable:ServerCallable):void{
 			
 			var request:Request = new Request();

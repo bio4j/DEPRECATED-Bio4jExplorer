@@ -30,6 +30,8 @@
 		<![CDATA[
 			import com.era7.bioinfo.bio4jexplorer.comm.Bio4jExplorerMapper;
 			import com.era7.bioinfo.bio4jexplorer.comm.RequestList;
+			import com.era7.bioinfo.bio4jexplorer.gui.NodeIndexesTitleWindow;
+			import com.era7.bioinfo.bio4jexplorer.gui.RelationshipIndexesTitleWindow;
 			import com.era7.bioinfo.gui.IconsManager;
 			import com.era7.communication.managers.MainManager;
 			import com.era7.communication.xml.Request;
@@ -61,71 +63,54 @@
 			
 			import flash.net.navigateToURL;
 			
+			import mx.collections.Sort;
+			import mx.collections.SortField;
+			import mx.collections.XMLListCollection;
 			import mx.controls.Alert;
 			import mx.events.FlexEvent;
 			import mx.events.ListEvent;
+			import mx.managers.PopUpManager;
 			
 			
 			protected var bio4jExplorerMapper:Bio4jExplorerMapper = null;
 			
 			[Bindable]
-			protected var nodesXMLList:XMLList = null;
+			protected var nodesXMLList:XMLListCollection = null;
 			[Bindable]
-			protected var relationshipsXMLList:XMLList = null;
+			protected var relationshipsXMLList:XMLListCollection = null;
 			[Bindable]
-			protected var rightXMLList:XMLList = null;
+			protected var rightXMLList:XMLListCollection = null;
 			[Bindable]
-			protected var leftXMLList:XMLList = null;
-			
-			
-			protected var nodeXML:XML = <node>
-    <name>Person</name>
-    <description>People involved in protein citations</description>
-    <item_type>node</item_type>
-    <in_rels>
-      <relationship>
-        <name>OnlineArticleAuthor</name>
-      </relationship>
-      <relationship>
-        <name>UnpublishedObservationAuthor</name>
-      </relationship>
-      <relationship>
-        <name>ThesisAuthor</name>
-      </relationship>
-      <relationship>
-        <name>BookAuthor</name>
-      </relationship>
-      <relationship>
-        <name>SubmissionAuthor</name>
-      </relationship>
-      <relationship>
-        <name>ArticleAuthor</name>
-      </relationship>
-      <relationship>
-        <name>BookEditor</name>
-      </relationship>
-      <relationship>
-        <name>PatentAuthor</name>
-      </relationship>
-    </in_rels>
-  </node>;
-			
+			protected var leftXMLList:XMLListCollection = null;
+						
 			//---------STATES------------
 			public const NODE_STATE:String = "NodeState";
 			public const RELATIONSHIP_STATE:String = "RelationshipState";
 			
+			//----layouts---
 			protected var circleLayout:CircleLayout = null;
-			protected var forceLayout:ForceDirectedLayout = null;
+			//protected var forceLayout:ForceDirectedLayout = null;
+			
+			protected var nodeSpriteBeingDragged:Boolean = false;
+			protected var nodeSpriteMouseDown:Boolean = false;
+			
+			protected var currentElement:XML = null;
+			
+			//---------title windows----------------
+			protected var nodeIndexesTitleWindow:NodeIndexesTitleWindow = null;
+			protected var relationshipIndexesTitleWindow:RelationshipIndexesTitleWindow = null;
+			
 			
 			protected function application1_creationCompleteHandler(event:FlexEvent):void
 			{
+			
 				MainManager.DEBUG_MODE = false;
 				MainManager.ADD_SESSION_ID_TO_REQUEST = false;
 				
 				bio4jExplorerMapper = new Bio4jExplorerMapper();				
 				
 				bio4jExplorerMapper.getNodes(this);
-				bio4jExplorerMapper.getRelationships(this); 		
+				bio4jExplorerMapper.getRelationships(this); 
 				
 			}
 			
@@ -141,15 +126,16 @@
 				
 				if(response.getMethod() == RequestList.GET_NODES_REQUEST){
 					
-					nodesXMLList = response.getContent().child("node");			
+					nodesXMLList = sortXMLList(response.getContent().child("node").child("name"));			
 					
 				}else if(response.getMethod() == RequestList.GET_RELATIONSHIPS_REQUEST){
 					
-					relationshipsXMLList = response.getContent().child("relationship");		
+					relationshipsXMLList = sortXMLList(response.getContent().child("relationship").child("name"));		
 					
 				}else if(response.getMethod() == RequestList.GET_NODE_REQUEST){
 					
 					var node:XML = response.getContent().child("node")[0];
+					currentElement = node;
 					itemTypeLabel.text = node.item_type;
 					elementNameLabel.text = node.name;
 					descriptionTextArea.text = node.description;
@@ -158,17 +144,19 @@
 					if(node.in_rels[0] == null){
 						leftXMLList = null;
 					}else{
-						leftXMLList = node.in_rels[0].relationship;
+						leftXMLList = sortXMLList(node.in_rels[0].relationship.name);
 					}
 					
 					//right rels
 					if(node.out_rels[0] == null){
 						rightXMLList = null;
 					}else{
-						rightXMLList = node.out_rels[0].relationship;
+						rightXMLList = sortXMLList(node.out_rels[0].relationship.name);
 					}
 					
-					currentState = NODE_STATE;
+					browseIndexesButton.enabled = (node.indexes[0] != null);
+					
+					currentState = NODE_STATE;	
 					
 					visualizeGraph(node);
 										
@@ -176,6 +164,7 @@
 				}else if(response.getMethod() == RequestList.GET_RELATIONSHIP_REQUEST){
 					
 					var rel:XML = response.getContent().child("relationship")[0];
+					currentElement = rel;
 					itemTypeLabel.text = rel.item_type;
 					elementNameLabel.text = rel.name;
 					descriptionTextArea.htmlText = rel.description;
@@ -184,19 +173,20 @@
 					if(rel.start_nodes[0] == null){
 						leftXMLList = null;
 					}else{
-						leftXMLList = rel.start_nodes[0].node;
+						leftXMLList = sortXMLList(rel.start_nodes[0].node.name);
 					}
 					//end nodes
 					if(rel.end_nodes[0] == null){
 						rightXMLList = null;
 					}else{
-						rightXMLList = rel.end_nodes[0].node;
+						rightXMLList = sortXMLList(rel.end_nodes[0].node.name);
 					}
 					
-					visualizeGraph(rel);
+					browseIndexesButton.enabled = (rel.indexes[0] != null);
 					
 					currentState = RELATIONSHIP_STATE;
 					
+					visualizeGraph(rel);													
 					
 				}
 			}
@@ -219,9 +209,26 @@
 			//----------------------------------------------------------------------------
 			
 			
+			protected function initNodeIndexesTitleWindow():void{
+				if(nodeIndexesTitleWindow == null){
+					nodeIndexesTitleWindow = NodeIndexesTitleWindow(PopUpManager.createPopUp(this,NodeIndexesTitleWindow,true));					
+					PopUpManager.centerPopUp(nodeIndexesTitleWindow);
+				}
+				PopUpManager.bringToFront(nodeIndexesTitleWindow);
+				nodeIndexesTitleWindow.visible = true;				
+			}
+			protected function initRelationshipIndexesTitleWindow():void{
+				if(relationshipIndexesTitleWindow == null){
+					relationshipIndexesTitleWindow = RelationshipIndexesTitleWindow(PopUpManager.createPopUp(this,RelationshipIndexesTitleWindow,true));					
+					PopUpManager.centerPopUp(relationshipIndexesTitleWindow);
+				}
+				PopUpManager.bringToFront(relationshipIndexesTitleWindow);
+				relationshipIndexesTitleWindow.visible = true;				
+			}
+			
 			protected function visualizeGraph(element:XML):void{
 				
-				var nodeCounter:int = 0;				
+				var nodeCounter:int = 0;
 				var elementName:String = element.name.toString();
 				
 				var itemType:String = element.item_type.toString();
@@ -236,6 +243,7 @@
 					var nodeObject:Object = {};
 					nodeObject["id"] = elementName;
 					nodeObject["label"] = elementName;
+					nodeObject["position"] = "center";
 					var nodeSprite:NodeSprite = data.addNode(nodeObject);
 					
 					for(var i:int=0; i<inRels.length(); i++){
@@ -243,6 +251,7 @@
 						var tempNodeObject:Object = {};
 						tempNodeObject["id"] = nodeCounter++;
 						tempNodeObject["label"] = "Node";
+						tempNodeObject["position"] = "start";
 						var tempNodeSprite:NodeSprite = data.addNode(tempNodeObject);
 						
 						var edgeObject:Object = {};
@@ -257,6 +266,7 @@
 						tempNodeObject = {};
 						tempNodeObject["id"] = nodeCounter++;
 						tempNodeObject["label"] = "Node";
+						tempNodeObject["position"] = "end";
 						tempNodeSprite = data.addNode(tempNodeObject);
 						
 						edgeObject = {};
@@ -322,10 +332,13 @@
 						ns.shape = Shapes.CIRCLE;
 						ns.buttonMode = true;              // show hand cursor
 						ns.mouseEnabled = true;
-						ns.fillColor = 0x3f83d8;
+						ns.fillColor = 0x7caeec;
 						ns.fillAlpha = 1.0;
 						
 						ns.addEventListener(MouseEvent.CLICK,onNodeSpriteClick);
+						ns.addEventListener(MouseEvent.MOUSE_DOWN, onNodeSpriteMouseDown);
+						ns.addEventListener(MouseEvent.MOUSE_UP, onNodeSpriteMouseUp);
+						ns.addEventListener(MouseEvent.MOUSE_MOVE, onNodeSpriteMouseMove);
 						
 					}						
 					
@@ -361,9 +374,7 @@
 				
 				var nodeLabeler:Labeler = new Labeler("data.label", Data.NODES);
 				vis.operators.add(nodeLabeler);		
-				circleLayout = new CircleLayout()
-				vis.operators.add(circleLayout);		
-				
+					
 				// enables the nodes to be dragged by the mouse
 				var dc:DragControl = new DragControl(NodeSprite);
 				vis.controls.add(dc);
@@ -371,9 +382,16 @@
 				// enables the node to move to the front when the mouse moves over it
 				var hc:HoverControl = new HoverControl(NodeSprite, HoverControl.MOVE_TO_FRONT);
 				vis.controls.add(hc);
-								
+				
 				vis.update();
+				
 				flareVis.visualization = vis;
+				
+				if(itemType == "node"){
+					applyLevelLayout();
+				}else{
+					applyCircularLayout();
+				}
 				
 			}
 			
@@ -384,10 +402,33 @@
 				es.props.label.y = (es.source.y + es.target.y) / 2;	
 			}
 			
+			//----------------------------------------------------------
+			//---------------NODE SPRITE MOUSE EVENTS------------------
+			//-----------------------------------------------------------
+			
 			private function onNodeSpriteClick(event:MouseEvent):void{
-				var ns:NodeSprite = event.target as NodeSprite;
-				bio4jExplorerMapper.getNode(ns.data.label,this);
+				if(!nodeSpriteBeingDragged){
+					var ns:NodeSprite = event.target as NodeSprite;
+					bio4jExplorerMapper.getNode(ns.data.label,this);
+				}else{
+					nodeSpriteBeingDragged = false;
+				}
+				
 			}
+			private function onNodeSpriteMouseUp(event:MouseEvent):void{
+				nodeSpriteMouseDown = false;
+			}
+			private function onNodeSpriteMouseDown(event:MouseEvent):void{
+				nodeSpriteMouseDown = true;
+			}
+			private function onNodeSpriteMouseMove(event:MouseEvent):void{
+				if(nodeSpriteMouseDown){
+					nodeSpriteBeingDragged = true;
+				}
+			}
+			//----------------------------------------------------------
+			//----------------------------------------------------------
+			
 			private function onEdgeSpriteClick(event:MouseEvent):void{
 				var es:EdgeSprite = event.target as EdgeSprite;
 				bio4jExplorerMapper.getRelationship(es.data.label,this);
@@ -430,7 +471,7 @@
 			}
 
 
-			protected function stopLayoutButton_clickHandler(event:MouseEvent):void
+			/* protected function stopLayoutButton_clickHandler(event:MouseEvent):void
 			{
 				flareVis.visualization.continuousUpdates = false;
 			}
@@ -457,9 +498,9 @@
 					setForceLayout();
 					
 				}
-			}
+			} */
 			
-			protected function setForceLayout():void{
+			/* protected function setForceLayout():void{
 				
 				forceLayout = new ForceDirectedLayout(true);
 				forceLayout.defaultParticleMass = 10;
@@ -471,12 +512,95 @@
 				flareVis.visualization.update();				
 				flareVis.visualization.continuousUpdates = true;
 				
-			}
-
-
+			} */
+/* 
 			protected function button2_clickHandler(event:MouseEvent):void
 			{
 				visualizeGraph(nodeXML);
+			} */
+			
+			private function sortXMLList(list:XMLList):XMLListCollection{
+				
+				var temp:XMLListCollection = new XMLListCollection(list);
+				
+				var nameSort:Sort = new Sort();
+				nameSort.fields = [new SortField()];
+				
+				temp.sort = nameSort;
+				temp.refresh();
+
+				return temp;
+			}
+
+
+			protected function browseIndexesButton_clickHandler(event:MouseEvent):void
+			{
+				if(currentState == NODE_STATE){
+					
+					initNodeIndexesTitleWindow();
+					nodeIndexesTitleWindow.xml = currentElement.indexes[0];
+					
+				}else if (currentState == RELATIONSHIP_STATE){
+					
+					initRelationshipIndexesTitleWindow()();
+					relationshipIndexesTitleWindow.xml = currentElement.indexes[0];
+					
+				}
+			}
+			
+			protected function goToJavadocButton_clickHandler(event:MouseEvent):void
+			{
+				navigateToURL(new URLRequest(currentElement.child("javadoc_url").toString()),"_blank");
+			}
+
+
+			protected function levelLayoutButton_clickHandler(event:MouseEvent):void
+			{
+				applyLevelLayout();
+			}
+
+
+			protected function circularLayoutButton_clickHandler(event:MouseEvent):void
+			{
+				applyCircularLayout();
+			}
+			
+			protected function applyCircularLayout():void{
+				if(circleLayout == null){
+					circleLayout = new CircleLayout();
+				}				
+				flareVis.visualization.operators.add(circleLayout);
+				flareVis.visualization.update();
+			}
+			protected function applyLevelLayout():void{				
+				
+				var yCounterStart:int = 0;
+				var yCounterEnd:int = 0;
+				
+				flareVis.visualization.data.nodes.visit(function(ns:NodeSprite):void {
+					
+					if(ns.data.position == "start"){
+						
+						ns.x = 100;
+						ns.y = yCounterStart+= 50;
+						
+
+					}else if(ns.data.position == "end"){
+						
+						ns.x = graphCanvas.width - 130;
+						ns.y = yCounterEnd+= 50;					
+						
+						
+					}else if(ns.data.position == "center"){
+						
+						ns.x = graphCanvas.width/2;
+						ns.y = graphCanvas.height/2;
+						
+					}
+					
+				});
+				
+				flareVis.visualization.update();				
 			}
 
 		]]>
@@ -515,7 +639,7 @@
 				<mx:List id="nodesList" 
 						 width="100%"
 						 height="100%"
-						 dataProvider="{nodesXMLList.name}"
+						 dataProvider="{nodesXMLList}"
 						 labelField="name"
 						 itemClick="nodesList_itemClickHandler(event)"/>
 			</s:NavigatorContent>
@@ -525,7 +649,7 @@
 				<mx:List id="relationshipsList" 
 						 width="100%"
 						 height="100%"
-						 dataProvider="{relationshipsXMLList.name}"
+						 dataProvider="{relationshipsXMLList}"
 						 itemClick="relationshipsList_itemClickHandler(event)"/>
 			</s:NavigatorContent>			
 		</mx:TabNavigator>	
@@ -540,15 +664,31 @@
 					  width="100%" 
 					  >
 				<s:Label id="elementNameLabel" fontSize="16" fontWeight="bold"/>
-				<s:HGroup verticalAlign="middle">
+				<s:HGroup verticalAlign="middle" width="100%">
 					<s:Label text="Item type:"  
 							 fontWeight="bold"/>
 					<s:Label id="itemTypeLabel"/>
-				</s:HGroup>				
+					<mx:Spacer width="100%"/>
+					<s:Button label="Go to Javadoc"
+							  id="goToJavadocButton"
+							  click="goToJavadocButton_clickHandler(event)" 
+							  width="109"/>
+				</s:HGroup>		
+				<s:HGroup verticalAlign="middle" width="100%">
+					<s:Label text="Indexed:"  
+							 fontWeight="bold" width="56"/>
+					<s:Label id="indexedLabel"/>
+					<mx:Spacer width="100%"/>
+					<s:Button label="Browse indexes"
+							  id="browseIndexesButton"
+							  click="browseIndexesButton_clickHandler(event)" 
+							  enabled="false"/>
+				</s:HGroup>	
 				<s:Label text="Description:" fontWeight="bold"/>
 				<mx:TextArea id="descriptionTextArea" 
 							 width="100%" 
-							 height="60" editable.RelationshipState="false"/>				
+							 height="60" 
+							 editable="false"/>				
 				<s:HGroup width="100%" height="100%">
 					<mx:VBox width="100%" 
 							 height="100%" 
@@ -563,7 +703,7 @@
 						<mx:List id="leftList"	
 								 height="100%"
 								 width="100%"
-								 dataProvider="{leftXMLList.name}"
+								 dataProvider="{leftXMLList}"
 								 itemClick="leftList_itemClickHandler(event)"/>
 					</mx:VBox>
 					<mx:VBox width="100%" 
@@ -579,8 +719,9 @@
 						<mx:List id="rightList"	
 								 height="100%"
 								 width="100%"
-								 dataProvider="{rightXMLList.name}"
-								 itemClick="rightList_itemClickHandler(event)"/>
+								 dataProvider="{rightXMLList}"
+								 itemClick="rightList_itemClickHandler(event)"
+								 />
 					</mx:VBox>
 				</s:HGroup>
 			</s:VGroup>
@@ -601,7 +742,13 @@
 				<s:HGroup horizontalAlign="right" 
 						  width="100%"
 						  verticalAlign="middle">
-					<s:CheckBox 
+					<s:Button label="Apply level layout" 
+							  id="levelLayoutButton" 
+							  click="levelLayoutButton_clickHandler(event)"/>
+					<s:Button label="Apply circular layout" 
+							  id="circularLayoutButton" 
+							  click="circularLayoutButton_clickHandler(event)"/>
+					<!--<s:CheckBox 
 						id="layoutCheckBox"
 						change="layoutCheckBox_changeHandler(event)"
 						label="Apply force layout" 
@@ -613,7 +760,7 @@
 							  id="startLayoutButton"
 							  click="startLayoutButton_clickHandler(event)"
 							  enabled="{layoutCheckBox.selected}"
-							  />
+							  />-->
 				</s:HGroup>
 			</s:VGroup>							
 		</mx:VDividedBox>		

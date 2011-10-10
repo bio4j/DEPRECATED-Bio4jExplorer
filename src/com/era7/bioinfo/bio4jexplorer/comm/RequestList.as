@@ -9,7 +9,7 @@ package com.era7.bioinfo.bio4jexplorer.comm
 		public static const GET_NODE_REQUEST:String = "get_node";
 		public static const GET_RELATIONSHIP_REQUEST:String = "get_relationship";
 		
-		
+		public static const GET_EVERYTHING_REQUEST:String = "get_everything";
 		
 	}
 }
