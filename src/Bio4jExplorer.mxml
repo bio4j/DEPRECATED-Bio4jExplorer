@@ -7,7 +7,8 @@
 			   implements="com.era7.communication.interfaces.ServerCallable"	
 			   creationComplete="application1_creationCompleteHandler(event)" 
 			   currentState="NodeState" 
-			   xmlns:flex="flare.flex.*">
+			   xmlns:flex="flare.flex.*" 
+			   backgroundColor="#FFFFFF">
 	<s:states>
 		<s:State name="NodeState"/>
 		<s:State name="RelationshipState"/>
@@ -332,7 +333,7 @@
 						ns.shape = Shapes.CIRCLE;
 						ns.buttonMode = true;              // show hand cursor
 						ns.mouseEnabled = true;
-						ns.fillColor = 0x7caeec;
+						ns.fillColor = 0xb8463d;
 						ns.fillAlpha = 1.0;
 						
 						ns.addEventListener(MouseEvent.CLICK,onNodeSpriteClick);
@@ -574,9 +575,11 @@
 			}
 			protected function applyLevelLayout():void{				
 				
+				flareVis.visualization.operators.remove(circleLayout);
+				
 				var yCounterStart:int = 0;
 				var yCounterEnd:int = 0;
-				
+								
 				flareVis.visualization.data.nodes.visit(function(ns:NodeSprite):void {
 					
 					if(ns.data.position == "start"){
@@ -631,7 +634,7 @@
 					paddingTop="10" 
 					paddingBottom="10" 
 					width="100%" 
-					height="100%">
+					height="100%" horizontalGap="20">
 		<mx:TabNavigator height="100%">
 			<s:NavigatorContent label="Nodes" 
 								width="100%" 
@@ -656,18 +659,25 @@
 		<!--<s:Button label="Button" click="button2_clickHandler(event)"/>-->
 		<mx:VDividedBox width="100%" 
 						height="100%"
-						paddingLeft="10" 
-						paddingRight="10" 
-						paddingBottom="10" 
-						paddingTop="10">
-			<s:VGroup height="100%"
+						paddingLeft.RelationshipState="10" paddingRight.RelationshipState="10" paddingBottom.RelationshipState="10" paddingTop.RelationshipState="10">
+			<mx:VBox height="100%"
 					  width="100%" 
-					  >
-				<s:Label id="elementNameLabel" fontSize="16" fontWeight="bold"/>
+					   paddingLeft="10" 
+					   paddingTop="10" 
+					   paddingRight="10" 
+					   paddingBottom="10" 
+					   backgroundColor="#F4F4F4">
+				<mx:Label id="elementNameLabel" 
+						  fontSize="16" 
+						  fontWeight="bold"
+						  selectable="true"/>
 				<s:HGroup verticalAlign="middle" width="100%">
-					<s:Label text="Item type:"  
-							 fontWeight="bold"/>
-					<s:Label id="itemTypeLabel"/>
+					<mx:Label text="Item type:"  
+							 fontWeight="bold"
+							 selectable="true"
+							 />
+					<mx:Label id="itemTypeLabel"
+							  selectable="true"/>
 					<mx:Spacer width="100%"/>
 					<s:Button label="Go to Javadoc"
 							  id="goToJavadocButton"
@@ -675,28 +685,33 @@
 							  width="109"/>
 				</s:HGroup>		
 				<s:HGroup verticalAlign="middle" width="100%">
-					<s:Label text="Indexed:"  
-							 fontWeight="bold" width="56"/>
-					<s:Label id="indexedLabel"/>
+					<mx:Label text="Indexed:"  
+							 fontWeight="bold" 
+							 width="56"
+							 selectable="true"/>
+					<mx:Label id="indexedLabel"
+							  selectable="true"/>
 					<mx:Spacer width="100%"/>
 					<s:Button label="Browse indexes"
 							  id="browseIndexesButton"
 							  click="browseIndexesButton_clickHandler(event)" 
 							  enabled="false"/>
 				</s:HGroup>	
-				<s:Label text="Description:" fontWeight="bold"/>
+				<mx:Label text="Description:" 
+						 fontWeight="bold"
+						 selectable="true"/>
 				<mx:TextArea id="descriptionTextArea" 
 							 width="100%" 
 							 height="60" 
-							 editable="false"/>				
+							 editable="false"
+							 selectable="true"/>				
 				<s:HGroup width="100%" height="100%">
 					<mx:VBox width="100%" 
 							 height="100%" 
-							 paddingLeft="10" 
-							 paddingTop="10" 
-							 paddingRight="10" 
-							 paddingBottom="10" 
-							 backgroundColor="#EEEEEE">
+							 paddingLeft="0" 
+							 paddingRight="0" 
+							 paddingBottom="0" 
+							 paddingTop="10" >
 						<s:Label text.NodeState="Incoming Relationships" 
 								 text.RelationshipState="Start Nodes" 
 								 fontWeight="bold"/>
@@ -708,11 +723,10 @@
 					</mx:VBox>
 					<mx:VBox width="100%" 
 							 height="100%" 
-							 paddingLeft="10" 
-							 paddingTop="10" 
-							 paddingRight="10" 
-							 paddingBottom="10" 
-							 backgroundColor="#EEEEEE">
+							 paddingLeft="0" 
+							 paddingRight="0" 
+							 paddingBottom="0" 
+							 paddingTop="10" >
 						<s:Label text.NodeState="Outgoing Relationships" 
 								 text.RelationshipState="End Nodes" 
 								 fontWeight="bold"/>
@@ -724,7 +738,7 @@
 								 />
 					</mx:VBox>
 				</s:HGroup>
-			</s:VGroup>
+			</mx:VBox>
 			<s:VGroup width="100%"
 					  height="100%">
 				<mx:Canvas id="graphCanvas" 
