@@ -1,0 +1,781 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009" 
+			   xmlns:s="library://ns.adobe.com/flex/spark" 
+			   xmlns:mx="library://ns.adobe.com/flex/mx" 
+			   minWidth="955" 
+			   minHeight="600"
+			   implements="com.era7.communication.interfaces.ServerCallable"	
+			   creationComplete="application1_creationCompleteHandler(event)" 
+			   currentState="NodeState" 
+			   xmlns:flex="flare.flex.*" 
+			   backgroundColor="#FFFFFF">
+	<s:states>
+		<s:State name="NodeState"/>
+		<s:State name="RelationshipState"/>
+	</s:states>
+	<fx:Style>
+		@namespace s "library://ns.adobe.com/flex/spark";
+		@namespace mx "library://ns.adobe.com/flex/mx";
+		@namespace flex "flare.flex.*";
+		@font-face {
+			src:url("../assets/verdana.ttf");
+			fontFamily: Verdana;
+			advancedAntiAliasing: true;
+		}		
+	</fx:Style>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import com.era7.bioinfo.bio4jexplorer.comm.Bio4jExplorerMapper;
+			import com.era7.bioinfo.bio4jexplorer.comm.RequestList;
+			import com.era7.bioinfo.bio4jexplorer.gui.NodeIndexesTitleWindow;
+			import com.era7.bioinfo.bio4jexplorer.gui.RelationshipIndexesTitleWindow;
+			import com.era7.bioinfo.gui.IconsManager;
+			import com.era7.communication.managers.MainManager;
+			import com.era7.communication.xml.Request;
+			import com.era7.communication.xml.Response;
+			import com.era7.util.debug.Debugger;
+			import com.ofnodesandedges.y2011.core.control.CoreControler;
+			import com.ofnodesandedges.y2011.core.data.Edge;
+			import com.ofnodesandedges.y2011.core.data.Graph;
+			import com.ofnodesandedges.y2011.core.data.Node;
+			import com.ofnodesandedges.y2011.core.layout.forceAtlas.ForceAtlas;
+			
+			import flare.display.TextSprite;
+			import flare.query.methods.eq;
+			import flare.util.Shapes;
+			import flare.vis.Visualization;
+			import flare.vis.controls.DragControl;
+			import flare.vis.controls.HoverControl;
+			import flare.vis.data.Data;
+			import flare.vis.data.DataList;
+			import flare.vis.data.DataSprite;
+			import flare.vis.data.EdgeSprite;
+			import flare.vis.data.NodeSprite;
+			import flare.vis.data.render.ArrowType;
+			import flare.vis.operator.label.Labeler;
+			import flare.vis.operator.layout.CircleLayout;
+			import flare.vis.operator.layout.DendrogramLayout;
+			import flare.vis.operator.layout.ForceDirectedLayout;
+			import flare.vis.operator.layout.RadialTreeLayout;
+			
+			import flash.net.navigateToURL;
+			
+			import mx.collections.Sort;
+			import mx.collections.SortField;
+			import mx.collections.XMLListCollection;
+			import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			import mx.events.ListEvent;
+			import mx.managers.PopUpManager;
+			
+			
+			protected var bio4jExplorerMapper:Bio4jExplorerMapper = null;
+			
+			[Bindable]
+			protected var nodesXMLList:XMLListCollection = null;
+			[Bindable]
+			protected var relationshipsXMLList:XMLListCollection = null;
+			[Bindable]
+			protected var rightXMLList:XMLListCollection = null;
+			[Bindable]
+			protected var leftXMLList:XMLListCollection = null;
+						
+			//---------STATES------------
+			public const NODE_STATE:String = "NodeState";
+			public const RELATIONSHIP_STATE:String = "RelationshipState";
+			
+			//----layouts---
+			protected var circleLayout:CircleLayout = null;
+			//protected var forceLayout:ForceDirectedLayout = null;
+			
+			protected var nodeSpriteBeingDragged:Boolean = false;
+			protected var nodeSpriteMouseDown:Boolean = false;
+			
+			protected var currentElement:XML = null;
+			
+			//---------title windows----------------
+			protected var nodeIndexesTitleWindow:NodeIndexesTitleWindow = null;
+			protected var relationshipIndexesTitleWindow:RelationshipIndexesTitleWindow = null;
+			
+			
+			protected function application1_creationCompleteHandler(event:FlexEvent):void
+			{
+			
+				MainManager.DEBUG_MODE = false;
+				MainManager.ADD_SESSION_ID_TO_REQUEST = false;
+				
+				bio4jExplorerMapper = new Bio4jExplorerMapper();				
+				
+				bio4jExplorerMapper.getNodes(this);
+				bio4jExplorerMapper.getRelationships(this); 
+				
+			}
+			
+			
+			
+			//----------------------------------------------------------------------------
+			//---------------------------SERVER COMMUNICATION-----------------------------
+			//----------------------------------------------------------------------------
+			/**
+			 * 	PROCESS SUCCESSFUL RESPONSE
+			 */
+			public function processSuccessfulResponse(response:Response):void{
+				
+				if(response.getMethod() == RequestList.GET_NODES_REQUEST){
+					
+					nodesXMLList = sortXMLList(response.getContent().child("node").child("name"));			
+					
+				}else if(response.getMethod() == RequestList.GET_RELATIONSHIPS_REQUEST){
+					
+					relationshipsXMLList = sortXMLList(response.getContent().child("relationship").child("name"));		
+					
+				}else if(response.getMethod() == RequestList.GET_NODE_REQUEST){
+					
+					var node:XML = response.getContent().child("node")[0];
+					currentElement = node;
+					itemTypeLabel.text = node.item_type;
+					elementNameLabel.text = node.name;
+					descriptionTextArea.text = node.description;
+					
+					//left rels
+					if(node.in_rels[0] == null){
+						leftXMLList = null;
+					}else{
+						leftXMLList = sortXMLList(node.in_rels[0].relationship.name);
+					}
+					
+					//right rels
+					if(node.out_rels[0] == null){
+						rightXMLList = null;
+					}else{
+						rightXMLList = sortXMLList(node.out_rels[0].relationship.name);
+					}
+					
+					browseIndexesButton.enabled = (node.indexes[0] != null);
+					
+					currentState = NODE_STATE;	
+					
+					visualizeGraph(node);
+										
+					
+				}else if(response.getMethod() == RequestList.GET_RELATIONSHIP_REQUEST){
+					
+					var rel:XML = response.getContent().child("relationship")[0];
+					currentElement = rel;
+					itemTypeLabel.text = rel.item_type;
+					elementNameLabel.text = rel.name;
+					descriptionTextArea.htmlText = rel.description;
+					
+					//start nodes
+					if(rel.start_nodes[0] == null){
+						leftXMLList = null;
+					}else{
+						leftXMLList = sortXMLList(rel.start_nodes[0].node.name);
+					}
+					//end nodes
+					if(rel.end_nodes[0] == null){
+						rightXMLList = null;
+					}else{
+						rightXMLList = sortXMLList(rel.end_nodes[0].node.name);
+					}
+					
+					browseIndexesButton.enabled = (rel.indexes[0] != null);
+					
+					currentState = RELATIONSHIP_STATE;
+					
+					visualizeGraph(rel);													
+					
+				}
+			}
+			/**
+			 * 	PROCESS ERROR RESPONSE
+			 */
+			public function processErrorResponse(response:Response):void{
+				Alert.show(response.getErrorItem().getDescription());
+			}
+			/**
+			 * 	PROCESS NO SESSION RESPONSE
+			 */
+			public function processNoSessionResponse(response:Response):void{}
+			/**
+			 * 	PROCESS REQUEST TIMEOUT
+			 */
+			public function processRequestTimeout(request:Request):void{}
+			
+			//----------------------------------------------------------------------------
+			//----------------------------------------------------------------------------
+			
+			
+			protected function initNodeIndexesTitleWindow():void{
+				if(nodeIndexesTitleWindow == null){
+					nodeIndexesTitleWindow = NodeIndexesTitleWindow(PopUpManager.createPopUp(this,NodeIndexesTitleWindow,true));					
+					PopUpManager.centerPopUp(nodeIndexesTitleWindow);
+				}
+				PopUpManager.bringToFront(nodeIndexesTitleWindow);
+				nodeIndexesTitleWindow.visible = true;				
+			}
+			protected function initRelationshipIndexesTitleWindow():void{
+				if(relationshipIndexesTitleWindow == null){
+					relationshipIndexesTitleWindow = RelationshipIndexesTitleWindow(PopUpManager.createPopUp(this,RelationshipIndexesTitleWindow,true));					
+					PopUpManager.centerPopUp(relationshipIndexesTitleWindow);
+				}
+				PopUpManager.bringToFront(relationshipIndexesTitleWindow);
+				relationshipIndexesTitleWindow.visible = true;				
+			}
+			
+			protected function visualizeGraph(element:XML):void{
+				
+				var nodeCounter:int = 0;
+				var elementName:String = element.name.toString();
+				
+				var itemType:String = element.item_type.toString();
+				
+				var data:Data = new Data(true);
+				
+				if(itemType == "node"){
+					
+					var inRels:XMLList = element.child("in_rels").child("relationship");
+					var outRels:XMLList = element.child("out_rels").child("relationship");		
+					
+					var nodeObject:Object = {};
+					nodeObject["id"] = elementName;
+					nodeObject["label"] = elementName;
+					nodeObject["position"] = "center";
+					var nodeSprite:NodeSprite = data.addNode(nodeObject);
+					
+					for(var i:int=0; i<inRels.length(); i++){
+						
+						var tempNodeObject:Object = {};
+						tempNodeObject["id"] = nodeCounter++;
+						tempNodeObject["label"] = "Node";
+						tempNodeObject["position"] = "start";
+						var tempNodeSprite:NodeSprite = data.addNode(tempNodeObject);
+						
+						var edgeObject:Object = {};
+						edgeObject["id"] = inRels[i].name.toString();
+						edgeObject["label"] = inRels[i].name.toString();
+						data.addEdgeFor(tempNodeSprite, nodeSprite, true, edgeObject);
+						
+					}
+					
+					for(i=0; i<outRels.length(); i++){
+						
+						tempNodeObject = {};
+						tempNodeObject["id"] = nodeCounter++;
+						tempNodeObject["label"] = "Node";
+						tempNodeObject["position"] = "end";
+						tempNodeSprite = data.addNode(tempNodeObject);
+						
+						edgeObject = {};
+						edgeObject["id"] = outRels[i].name.toString();
+						edgeObject["label"] = outRels[i].name.toString();
+						data.addEdgeFor(nodeSprite, tempNodeSprite, true, edgeObject);
+						
+					}
+					
+				}else if(itemType == "relationship"){
+					
+					var startNodes:XMLList = element.child("start_nodes").child("node");
+					var endNodes:XMLList = element.child("end_nodes").child("node");	
+					
+					var startSprites:Array = new Array();
+					var endSprites:Array = new Array();
+					
+					for(i=0; i<startNodes.length(); i++){
+						
+						var startNodeObject:Object = {};
+						startNodeObject["id"] = startNodes[i].name.toString();
+						startNodeObject["label"] = startNodes[i].name.toString();
+						var startNodeSprite:NodeSprite = data.addNode(startNodeObject);
+						
+						startSprites.push(startNodeSprite);						
+						
+					}
+					
+					for(i=0; i<endNodes.length(); i++){
+						
+						var endNodeObject:Object = {};
+						endNodeObject["id"] = endNodes[i].name.toString();
+						endNodeObject["label"] = endNodes[i].name.toString();
+						var endNodeSprite:NodeSprite = data.addNode(endNodeObject);
+						
+						endSprites.push(endNodeSprite);		
+						
+					}
+					
+					for(var j:int=0;j<startSprites.length;j++){
+						for(var h:int=0;h<endSprites.length;h++){
+							edgeObject = {};
+							edgeObject["id"] = elementName;
+							edgeObject["label"] = elementName;
+							data.addEdgeFor(startSprites[j] as NodeSprite, endSprites[h] as NodeSprite, true, edgeObject);
+						}						
+					}
+					
+				}
+				
+				data.nodes.visit(function(ns:NodeSprite):void {
+					
+					if(ns.data.label == "Node"){
+						
+						ns.size = 3;
+						ns.shape = Shapes.CIRCLE;
+						ns.buttonMode = false;              // show hand cursor
+						ns.mouseEnabled = true;
+						
+					}else{
+						
+						ns.size = 5;
+						ns.shape = Shapes.CIRCLE;
+						ns.buttonMode = true;              // show hand cursor
+						ns.mouseEnabled = true;
+						ns.fillColor = 0xb8463d;
+						ns.fillAlpha = 1.0;
+						
+						ns.addEventListener(MouseEvent.CLICK,onNodeSpriteClick);
+						ns.addEventListener(MouseEvent.MOUSE_DOWN, onNodeSpriteMouseDown);
+						ns.addEventListener(MouseEvent.MOUSE_UP, onNodeSpriteMouseUp);
+						ns.addEventListener(MouseEvent.MOUSE_MOVE, onNodeSpriteMouseMove);
+						
+					}						
+					
+				});
+				
+				data.edges.visit(function(es:EdgeSprite):void {
+					
+					es.lineWidth = 2
+					es.fillColor = 0x2e2e2e;
+					es.directed = true;
+					es.buttonMode = true;
+					es.mouseEnabled = true;		
+					es.arrowType = ArrowType.TRIANGLE;					
+					es.arrowHeight = 20;
+					es.arrowWidth = 10;
+					
+					es.addEventListener(MouseEvent.CLICK,onEdgeSpriteClick);
+					
+					es.addEventListener(Event.RENDER,updateEdgeLabelPosition);
+					
+				});
+					
+				
+				data.nodes.sortBy("data.label");
+				data.edges.sortBy("data.label");
+				
+				
+				var vis:Visualization = new Visualization();
+				vis.data = data;				
+				
+				var edgeLabeler:Labeler = new Labeler("data.label", Data.EDGES);
+				vis.operators.add(edgeLabeler);
+				
+				var nodeLabeler:Labeler = new Labeler("data.label", Data.NODES);
+				vis.operators.add(nodeLabeler);		
+					
+				// enables the nodes to be dragged by the mouse
+				var dc:DragControl = new DragControl(NodeSprite);
+				vis.controls.add(dc);
+				
+				// enables the node to move to the front when the mouse moves over it
+				var hc:HoverControl = new HoverControl(NodeSprite, HoverControl.MOVE_TO_FRONT);
+				vis.controls.add(hc);
+				
+				vis.update();
+				
+				flareVis.visualization = vis;
+				
+				if(itemType == "node"){
+					applyLevelLayout();
+				}else{
+					applyCircularLayout();
+				}
+				
+			}
+			
+			
+			private function updateEdgeLabelPosition(evt:Event):void {
+				var es:EdgeSprite = evt.target as EdgeSprite;
+				es.props.label.x = (es.source.x + es.target.x) / 2;
+				es.props.label.y = (es.source.y + es.target.y) / 2;	
+			}
+			
+			//----------------------------------------------------------
+			//---------------NODE SPRITE MOUSE EVENTS------------------
+			//-----------------------------------------------------------
+			
+			private function onNodeSpriteClick(event:MouseEvent):void{
+				if(!nodeSpriteBeingDragged){
+					var ns:NodeSprite = event.target as NodeSprite;
+					bio4jExplorerMapper.getNode(ns.data.label,this);
+				}else{
+					nodeSpriteBeingDragged = false;
+				}
+				
+			}
+			private function onNodeSpriteMouseUp(event:MouseEvent):void{
+				nodeSpriteMouseDown = false;
+			}
+			private function onNodeSpriteMouseDown(event:MouseEvent):void{
+				nodeSpriteMouseDown = true;
+			}
+			private function onNodeSpriteMouseMove(event:MouseEvent):void{
+				if(nodeSpriteMouseDown){
+					nodeSpriteBeingDragged = true;
+				}
+			}
+			//----------------------------------------------------------
+			//----------------------------------------------------------
+			
+			private function onEdgeSpriteClick(event:MouseEvent):void{
+				var es:EdgeSprite = event.target as EdgeSprite;
+				bio4jExplorerMapper.getRelationship(es.data.label,this);
+			}
+
+			protected function relationshipsList_itemClickHandler(event:ListEvent):void
+			{
+				bio4jExplorerMapper.getRelationship(String(relationshipsList.selectedItem),this);
+			}
+
+
+			protected function nodesList_itemClickHandler(event:ListEvent):void
+			{
+				bio4jExplorerMapper.getNode(String(nodesList.selectedItem),this);
+			}
+
+			protected function rightList_itemClickHandler(event:ListEvent):void
+			{
+				if(currentState == NODE_STATE){
+					bio4jExplorerMapper.getRelationship(String(rightList.selectedItem),this);
+				}else if(currentState == RELATIONSHIP_STATE){
+					bio4jExplorerMapper.getNode(String(rightList.selectedItem),this);
+				}
+			}
+
+
+			protected function leftList_itemClickHandler(event:ListEvent):void
+			{
+				if(currentState == NODE_STATE){
+					bio4jExplorerMapper.getRelationship(String(leftList.selectedItem),this);
+				}else if(currentState == RELATIONSHIP_STATE){
+					bio4jExplorerMapper.getNode(String(leftList.selectedItem),this);
+				}
+			}
+
+
+			protected function bio4jLogo_clickHandler(event:MouseEvent):void
+			{
+				navigateToURL(new URLRequest("http://www.bio4j.com"),"_blank");
+			}
+
+
+			/* protected function stopLayoutButton_clickHandler(event:MouseEvent):void
+			{
+				flareVis.visualization.continuousUpdates = false;
+			}
+
+
+			protected function startLayoutButton_clickHandler(event:MouseEvent):void
+			{
+				setForceLayout();
+			}
+
+
+			protected function layoutCheckBox_changeHandler(event:Event):void
+			{
+				if(!layoutCheckBox.selected){
+					
+					flareVis.visualization.operators.remove(forceLayout);
+					flareVis.visualization.operators.add(circleLayout);
+					
+					flareVis.visualization.update();				
+					flareVis.visualization.continuousUpdates = false;		
+					
+				}else{
+					
+					setForceLayout();
+					
+				}
+			} */
+			
+			/* protected function setForceLayout():void{
+				
+				forceLayout = new ForceDirectedLayout(true);
+				forceLayout.defaultParticleMass = 10;
+				forceLayout.defaultSpringLength = 150;
+				forceLayout.defaultSpringTension = 1;
+				flareVis.visualization.operators.remove(circleLayout);
+				flareVis.visualization.operators.add(forceLayout);
+				
+				flareVis.visualization.update();				
+				flareVis.visualization.continuousUpdates = true;
+				
+			} */
+/* 
+			protected function button2_clickHandler(event:MouseEvent):void
+			{
+				visualizeGraph(nodeXML);
+			} */
+			
+			private function sortXMLList(list:XMLList):XMLListCollection{
+				
+				var temp:XMLListCollection = new XMLListCollection(list);
+				
+				var nameSort:Sort = new Sort();
+				nameSort.fields = [new SortField()];
+				
+				temp.sort = nameSort;
+				temp.refresh();
+
+				return temp;
+			}
+
+
+			protected function browseIndexesButton_clickHandler(event:MouseEvent):void
+			{
+				if(currentState == NODE_STATE){
+					
+					initNodeIndexesTitleWindow();
+					nodeIndexesTitleWindow.xml = currentElement.indexes[0];
+					
+				}else if (currentState == RELATIONSHIP_STATE){
+					
+					initRelationshipIndexesTitleWindow()();
+					relationshipIndexesTitleWindow.xml = currentElement.indexes[0];
+					
+				}
+			}
+			
+			protected function goToJavadocButton_clickHandler(event:MouseEvent):void
+			{
+				navigateToURL(new URLRequest(currentElement.child("javadoc_url").toString()),"_blank");
+			}
+
+
+			protected function levelLayoutButton_clickHandler(event:MouseEvent):void
+			{
+				applyLevelLayout();
+			}
+
+
+			protected function circularLayoutButton_clickHandler(event:MouseEvent):void
+			{
+				applyCircularLayout();
+			}
+			
+			protected function applyCircularLayout():void{
+				if(circleLayout == null){
+					circleLayout = new CircleLayout();
+				}				
+				flareVis.visualization.operators.add(circleLayout);
+				flareVis.visualization.update();
+			}
+			protected function applyLevelLayout():void{				
+				
+				flareVis.visualization.operators.remove(circleLayout);
+				
+				var yCounterStart:int = 0;
+				var yCounterEnd:int = 0;
+								
+				flareVis.visualization.data.nodes.visit(function(ns:NodeSprite):void {
+					
+					if(ns.data.position == "start"){
+						
+						ns.x = 100;
+						ns.y = yCounterStart+= 50;
+						
+
+					}else if(ns.data.position == "end"){
+						
+						ns.x = graphCanvas.width - 130;
+						ns.y = yCounterEnd+= 50;					
+						
+						
+					}else if(ns.data.position == "center"){
+						
+						ns.x = graphCanvas.width/2;
+						ns.y = graphCanvas.height/2;
+						
+					}
+					
+				});
+				
+				flareVis.visualization.update();				
+			}
+
+		]]>
+	</fx:Script>
+	<s:layout>
+		<s:VerticalLayout/>
+	</s:layout>
+	
+	<s:HGroup width="100%" 
+			  verticalAlign="middle" 
+			  paddingLeft="10" 
+			  paddingTop="10" 
+			  paddingRight="10" 
+			  paddingBottom="10">
+		<mx:SWFLoader id="bio4jLogo" 
+					  source="{IconsManager.bio4jLogo}"
+					  useHandCursor="true"
+					  mouseChildren="false"
+					  buttonMode="true"
+					  click="bio4jLogo_clickHandler(event)"/>
+		<s:Label text="Bio4j Explorer" 
+				 fontSize="18" 
+				 fontWeight="bold" 
+				 fontFamily="Verdana"/>
+	</s:HGroup>	
+	<mx:HDividedBox paddingLeft="10" 
+					paddingRight="10" 
+					paddingTop="10" 
+					paddingBottom="10" 
+					width="100%" 
+					height="100%" horizontalGap="20">
+		<mx:TabNavigator height="100%">
+			<s:NavigatorContent label="Nodes" 
+								width="100%" 
+								height="100%">
+				<mx:List id="nodesList" 
+						 width="100%"
+						 height="100%"
+						 dataProvider="{nodesXMLList}"
+						 labelField="name"
+						 itemClick="nodesList_itemClickHandler(event)"/>
+			</s:NavigatorContent>
+			<s:NavigatorContent label="Relationships" 
+								width="100%" 
+								height="100%">
+				<mx:List id="relationshipsList" 
+						 width="100%"
+						 height="100%"
+						 dataProvider="{relationshipsXMLList}"
+						 itemClick="relationshipsList_itemClickHandler(event)"/>
+			</s:NavigatorContent>			
+		</mx:TabNavigator>	
+		<!--<s:Button label="Button" click="button2_clickHandler(event)"/>-->
+		<mx:VDividedBox width="100%" 
+						height="100%"
+						paddingLeft.RelationshipState="10" paddingRight.RelationshipState="10" paddingBottom.RelationshipState="10" paddingTop.RelationshipState="10">
+			<mx:VBox height="100%"
+					  width="100%" 
+					   paddingLeft="10" 
+					   paddingTop="10" 
+					   paddingRight="10" 
+					   paddingBottom="10" 
+					   backgroundColor="#F4F4F4">
+				<mx:Label id="elementNameLabel" 
+						  fontSize="16" 
+						  fontWeight="bold"
+						  selectable="true"/>
+				<s:HGroup verticalAlign="middle" width="100%">
+					<mx:Label text="Item type:"  
+							 fontWeight="bold"
+							 selectable="true"
+							 />
+					<mx:Label id="itemTypeLabel"
+							  selectable="true"/>
+					<mx:Spacer width="100%"/>
+					<s:Button label="Go to Javadoc"
+							  id="goToJavadocButton"
+							  click="goToJavadocButton_clickHandler(event)" 
+							  width="109"/>
+				</s:HGroup>		
+				<s:HGroup verticalAlign="middle" width="100%">
+					<mx:Label text="Indexed:"  
+							 fontWeight="bold" 
+							 width="56"
+							 selectable="true"/>
+					<mx:Label id="indexedLabel"
+							  selectable="true"/>
+					<mx:Spacer width="100%"/>
+					<s:Button label="Browse indexes"
+							  id="browseIndexesButton"
+							  click="browseIndexesButton_clickHandler(event)" 
+							  enabled="false"/>
+				</s:HGroup>	
+				<mx:Label text="Description:" 
+						 fontWeight="bold"
+						 selectable="true"/>
+				<mx:TextArea id="descriptionTextArea" 
+							 width="100%" 
+							 height="60" 
+							 editable="false"
+							 selectable="true"/>				
+				<s:HGroup width="100%" height="100%">
+					<mx:VBox width="100%" 
+							 height="100%" 
+							 paddingLeft="0" 
+							 paddingRight="0" 
+							 paddingBottom="0" 
+							 paddingTop="10" >
+						<s:Label text.NodeState="Incoming Relationships" 
+								 text.RelationshipState="Start Nodes" 
+								 fontWeight="bold"/>
+						<mx:List id="leftList"	
+								 height="100%"
+								 width="100%"
+								 dataProvider="{leftXMLList}"
+								 itemClick="leftList_itemClickHandler(event)"/>
+					</mx:VBox>
+					<mx:VBox width="100%" 
+							 height="100%" 
+							 paddingLeft="0" 
+							 paddingRight="0" 
+							 paddingBottom="0" 
+							 paddingTop="10" >
+						<s:Label text.NodeState="Outgoing Relationships" 
+								 text.RelationshipState="End Nodes" 
+								 fontWeight="bold"/>
+						<mx:List id="rightList"	
+								 height="100%"
+								 width="100%"
+								 dataProvider="{rightXMLList}"
+								 itemClick="rightList_itemClickHandler(event)"
+								 />
+					</mx:VBox>
+				</s:HGroup>
+			</mx:VBox>
+			<s:VGroup width="100%"
+					  height="100%">
+				<mx:Canvas id="graphCanvas" 
+						   width="100%"
+						   height="100%" 
+						   backgroundColor="0xeeeFFF" >
+					<flex:FlareVis id="flareVis" 
+								   backgroundColor="0xeeeFFF" 
+								   left="0" 
+								   top="0"	
+								   verticalScrollPolicy="off"
+								   horizontalScrollPolicy="off"
+								   clipContent="true"/> 
+				</mx:Canvas>
+				<s:HGroup horizontalAlign="right" 
+						  width="100%"
+						  verticalAlign="middle">
+					<s:Button label="Apply level layout" 
+							  id="levelLayoutButton" 
+							  click="levelLayoutButton_clickHandler(event)"/>
+					<s:Button label="Apply circular layout" 
+							  id="circularLayoutButton" 
+							  click="circularLayoutButton_clickHandler(event)"/>
+					<!--<s:CheckBox 
+						id="layoutCheckBox"
+						change="layoutCheckBox_changeHandler(event)"
+						label="Apply force layout" 
+						selected="false"/>
+					<s:Button label="Stop"
+							  id="stopLayoutButton"
+							  click="stopLayoutButton_clickHandler(event)"/>
+					<s:Button label="Start"
+							  id="startLayoutButton"
+							  click="startLayoutButton_clickHandler(event)"
+							  enabled="{layoutCheckBox.selected}"
+							  />-->
+				</s:HGroup>
+			</s:VGroup>							
+		</mx:VDividedBox>		
+	</mx:HDividedBox>	
+</s:Application>
