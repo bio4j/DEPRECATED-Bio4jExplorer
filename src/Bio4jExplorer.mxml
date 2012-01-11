@@ -21,8 +21,7 @@
 			src:url("../assets/verdana.ttf");
 			fontFamily: Verdana;
 			advancedAntiAliasing: true;
-		}
-		
+		}		
 	</fx:Style>
 	<fx:Declarations>
 		<!-- Place non-visual elements (e.g., services, value objects) here -->
